@@ -16,7 +16,7 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
         ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],))
         epsilon = torch.randn(*batch.shape)
         samples = torch.from_numpy(
-            diffusion.sample_q(batch, ts, epsilon=epsilon.numpy())
+            diffusion.sample_q(batch, ts.numpy(), epsilon=epsilon.numpy())
         ).float()
         predictions = predictor(samples, ts)
         loss = torch.mean((epsilon - predictions) ** 2)

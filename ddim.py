@@ -60,7 +60,7 @@ class Diffusion:
         betas = 1 - alphas
         return (1 / np.sqrt(alphas)) * (
             x_t - betas / np.sqrt(1 - alphas_t) * epsilon_prediction
-        )  # + np.sqrt(betas) * epsilon
+        ) + np.sqrt(betas) * epsilon
 
     def ddpm_sample(self, x_T, predictor):
         """
