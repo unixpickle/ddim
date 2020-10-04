@@ -33,17 +33,22 @@ class Predictor(nn.Module):
         self.num_steps = num_steps
         self.data_shape = data_shape
 
-        self.timestep_embed = nn.Embedding(num_steps + 1, 128)
+        self.timestep_coeff = torch.linspace(
+            start=0.1 / num_steps, end=100 / num_steps, steps=128
+        )[None]
+        self.timestep_phase = nn.Parameter(torch.randn(128)[None])
         self.input_embed = nn.Linear(int(np.prod(data_shape)), 128)
         self.layers = nn.Sequential(
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(128, 128),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(128, int(np.prod(data_shape))),
         )
 
     def forward(self, inputs, ts):
-        embed_ts = self.timestep_embed(ts)
+        embed_ts = torch.sin(
+            (self.timestep_coeff * ts.float()[:, None]) + self.timestep_phase
+        )
         embed_ins = self.input_embed(inputs.view(inputs.shape[0], -1))
         out = self.layers(embed_ins + embed_ts)
         return out.view(inputs.shape)
@@ -52,3 +57,35 @@ class Predictor(nn.Module):
         inputs = torch.from_numpy(inputs_np).float()
         ts = torch.from_numpy(ts_np).long()
         return self(inputs, ts).detach().numpy().astype(inputs_np.dtype)
+
+
+class BayesPredictor:
+    """
+    An epsilon predictor that uses Bayes rule to predict epsilon without any
+    learnable parameters--just a bunch of data.
+    """
+
+    def __init__(self, diffusion, data_batch):
+        self.diffusion = diffusion
+        self.data_batch = data_batch
+
+    def predict_epsilon(self, inputs, ts):
+        x_0 = []
+        alphas = self.diffusion.alphas_for_ts(ts, inputs.shape)
+        means = np.sqrt(alphas)[:, None] * self.data_batch[None]
+        variances = 1 - alphas
+        while len(variances.shape) < len(means.shape):
+            variances = variances[..., None]
+        logits = -(
+            0.5 * np.log(variances) + (0.5 / variances) * (inputs[:, None] - means) ** 2
+        )
+        while len(logits.shape) > 2:
+            logits = np.sum(logits, axis=-1)
+        logits -= np.max(logits, axis=1, keepdims=True)
+        probs = np.exp(logits)
+        probs /= np.sum(probs, axis=1, keepdims=True)
+        while len(probs.shape) < len(self.data_batch.shape) + 1:
+            probs = probs[..., None]
+        x_0 = np.sum(self.data_batch[None] * probs, axis=1)
+        alphas = self.diffusion.alphas_for_ts(ts, inputs.shape)
+        return (inputs - np.sqrt(alphas) * x_0) / np.sqrt(1 - alphas)

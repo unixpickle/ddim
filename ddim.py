@@ -29,14 +29,14 @@ class Diffusion:
         """
         if epsilon is None:
             epsilon = np.random.normal(size=x_0.shape)
-        alphas = self._alphas_for_ts(ts, x_0.shape)
+        alphas = self.alphas_for_ts(ts, x_0.shape)
         return np.sqrt(alphas) * x_0 + np.sqrt(1 - alphas) * epsilon
 
     def ddim_previous(self, x_t, ts, epsilon_prediction):
         """
         Take a ddim sampling step given x_t, t, and epsilon prediction.
         """
-        alphas = self._alphas_for_ts(ts, x_t.shape)
+        alphas = self.alphas_for_ts(ts, x_t.shape)
         x_0 = (x_t - np.sqrt(1 - alphas) * epsilon_prediction) / np.sqrt(alphas)
         return self.sample_q(x_0, ts - 1, epsilon=epsilon_prediction)
 
@@ -54,8 +54,8 @@ class Diffusion:
     def ddpm_previous(self, x_t, ts, epsilon_prediction, epsilon=None):
         if epsilon is None:
             epsilon = np.random.normal(size=x_t.shape)
-        alphas_t = self._alphas_for_ts(ts, x_t.shape)
-        alphas_prev = self._alphas_for_ts(ts - 1, x_t.shape)
+        alphas_t = self.alphas_for_ts(ts, x_t.shape)
+        alphas_prev = self.alphas_for_ts(ts - 1, x_t.shape)
         alphas = alphas_t / alphas_prev
         betas = 1 - alphas
         return (1 / np.sqrt(alphas)) * (
@@ -74,7 +74,7 @@ class Diffusion:
             x_t = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
         return x_t
 
-    def _alphas_for_ts(self, ts, shape):
+    def alphas_for_ts(self, ts, shape):
         alphas = self.alphas[ts]
         while len(alphas.shape) < len(shape):
             alphas = alphas[..., None]
