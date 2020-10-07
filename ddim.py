@@ -51,6 +51,18 @@ class Diffusion:
             x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
         return x_t
 
+    def ddim_sample_cond(self, x_T, predictor, x_cond, mask):
+        """
+        Like ddim_sample(), but condition on the part of x_cond which is True
+        in the boolean mask.
+        """
+        x_t = x_T
+        for t in range(1, self.num_steps)[::-1]:
+            ts = np.array([t] * x_T.shape[0])
+            x_t = np.where(mask, self.sample_q(x_cond, ts), x_t)
+            x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+        return np.where(mask, x_cond, x_t)
+
     def ddpm_previous(self, x_t, ts, epsilon_prediction, epsilon=None):
         if epsilon is None:
             epsilon = np.random.normal(size=x_t.shape)
@@ -73,6 +85,23 @@ class Diffusion:
             ts = np.array([t] * x_T.shape[0])
             x_t = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
         return x_t
+
+    def ddpm_sample_cond(self, x_T, predictor, x_cond, mask, num_subsamples=1):
+        """
+        Create a masked-conditional sample using DDPM.
+
+        See ddim_sample_cond() for usage details.
+        """
+        x_t = x_T
+        for t in range(1, self.num_steps)[::-1]:
+            samples = []
+            for _ in range(num_subsamples):
+                ts = np.array([t] * x_T.shape[0])
+                x_t = np.where(mask, self.sample_q(x_cond, ts), x_t)
+                x_next = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+                samples.append(x_next)
+            x_t = np.mean(samples, axis=0)
+        return np.where(mask, x_cond, x_t)
 
     def alphas_for_ts(self, ts, shape):
         alphas = self.alphas[ts]
