@@ -11,14 +11,15 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
     losses = []
     for batch in tqdm(data_batches):
         if predictor is None:
-            predictor = Predictor(diffusion.num_steps, batch.shape[1:])
+            predictor = Predictor(batch.shape[1:])
             optim = Adam(predictor.parameters(), lr=lr)
         ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],))
         epsilon = torch.randn(*batch.shape)
         samples = torch.from_numpy(
             diffusion.sample_q(batch, ts.numpy(), epsilon=epsilon.numpy())
         ).float()
-        predictions = predictor(samples, ts)
+        alphas = torch.from_numpy(diffusion.alphas_for_ts(ts.numpy()))
+        predictions = predictor(samples, alphas.float())
         loss = torch.mean((epsilon - predictions) ** 2)
         losses.append(loss.item())
         optim.zero_grad()
@@ -28,14 +29,11 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
 
 
 class Predictor(nn.Module):
-    def __init__(self, num_steps, data_shape):
+    def __init__(self, data_shape):
         super().__init__()
-        self.num_steps = num_steps
         self.data_shape = data_shape
 
-        self.timestep_coeff = torch.linspace(
-            start=0.1 / num_steps, end=100 / num_steps, steps=128
-        )[None]
+        self.timestep_coeff = torch.linspace(start=0.1, end=100, steps=128)[None]
         self.timestep_phase = nn.Parameter(torch.randn(128)[None])
         self.input_embed = nn.Linear(int(np.prod(data_shape)), 128)
         self.layers = nn.Sequential(
@@ -45,18 +43,18 @@ class Predictor(nn.Module):
             nn.Linear(128, int(np.prod(data_shape))),
         )
 
-    def forward(self, inputs, ts):
-        embed_ts = torch.sin(
-            (self.timestep_coeff * ts.float()[:, None]) + self.timestep_phase
+    def forward(self, inputs, alphas):
+        embed_alphas = torch.sin(
+            (self.timestep_coeff * alphas.float()[:, None]) + self.timestep_phase
         )
         embed_ins = self.input_embed(inputs.view(inputs.shape[0], -1))
-        out = self.layers(embed_ins + embed_ts)
+        out = self.layers(embed_ins + embed_alphas)
         return out.view(inputs.shape)
 
-    def predict_epsilon(self, inputs_np, ts_np):
+    def predict_epsilon(self, inputs_np, alphas_np):
         inputs = torch.from_numpy(inputs_np).float()
-        ts = torch.from_numpy(ts_np).long()
-        return self(inputs, ts).detach().numpy().astype(inputs_np.dtype)
+        alphas = torch.from_numpy(alphas_np).float()
+        return self(inputs, alphas).detach().numpy().astype(inputs_np.dtype)
 
 
 class BayesPredictor(nn.Module):
@@ -65,19 +63,17 @@ class BayesPredictor(nn.Module):
     learnable parameters--just a bunch of data.
     """
 
-    def __init__(self, diffusion, data_batch):
+    def __init__(self, data_batch):
         super().__init__()
-        self.diffusion = diffusion
         self.data_batch = data_batch
 
-    def forward(self, inputs, ts):
-        alphas = self.diffusion.alphas_for_ts(ts, inputs.shape)
-        means = np.sqrt(alphas)[:, None] * self.data_batch[None]
+    def forward(self, inputs, alphas):
+        while len(alphas.shape) < len(inputs.shape):
+            alphas = alphas[..., None]
+        means = torch.sqrt(alphas)[:, None] * self.data_batch[None]
         variances = 1 - alphas
         while len(variances.shape) < len(means.shape):
             variances = variances[..., None]
-        variances = torch.from_numpy(variances)
-        means = torch.from_numpy(means)
         logits = -(
             0.5 * torch.log(variances)
             + (0.5 / variances) * (inputs[:, None] - means) ** 2
@@ -90,11 +86,9 @@ class BayesPredictor(nn.Module):
         while len(probs.shape) < len(self.data_batch.shape) + 1:
             probs = probs[..., None]
         x_0 = torch.sum(torch.from_numpy(self.data_batch[None]) * probs, dim=1)
-        alphas = self.diffusion.alphas_for_ts(ts, inputs.shape)
-        alphas = torch.from_numpy(alphas)
         return (inputs - torch.sqrt(alphas) * x_0) / torch.sqrt(1 - alphas)
 
-    def predict_epsilon(self, inputs_np, ts_np):
+    def predict_epsilon(self, inputs_np, alphas_np):
         inputs = torch.from_numpy(inputs_np)
-        ts = torch.from_numpy(ts_np)
-        return self(inputs, ts).detach().numpy().astype(inputs_np.dtype)
+        alphas = torch.from_numpy(alphas_np)
+        return self(inputs, alphas).detach().numpy().astype(inputs_np.dtype)

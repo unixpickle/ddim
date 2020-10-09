@@ -43,12 +43,13 @@ class Diffusion:
     def ddim_sample(self, x_T, predictor):
         """
         Sample x_0 from x_t using DDIM, assuming a method on predictor called
-        predict_epsilon(x_t, ts).
+        predict_epsilon(x_t, alphas).
         """
         x_t = x_T
         for t in range(1, self.num_steps)[::-1]:
             ts = np.array([t] * x_T.shape[0])
-            x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+            alphas = self.alphas_for_ts(ts)
+            x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
         return x_t
 
     def ddim_sample_cond(self, x_T, predictor, x_cond, mask):
@@ -59,8 +60,9 @@ class Diffusion:
         x_t = x_T
         for t in range(1, self.num_steps)[::-1]:
             ts = np.array([t] * x_T.shape[0])
+            alphas = self.alphas_for_ts(ts)
             x_t = np.where(mask, self.sample_q(x_cond, ts), x_t)
-            x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+            x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
         return np.where(mask, x_cond, x_t)
 
     def ddpm_previous(self, x_t, ts, epsilon_prediction, epsilon=None):
@@ -83,7 +85,8 @@ class Diffusion:
         x_t = x_T
         for t in range(1, self.num_steps)[::-1]:
             ts = np.array([t] * x_T.shape[0])
-            x_t = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+            alphas = self.alphas_for_ts(ts)
+            x_t = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
         return x_t
 
     def ddpm_sample_cond(self, x_T, predictor, x_cond, mask, num_subsamples=1):
@@ -98,13 +101,18 @@ class Diffusion:
             for _ in range(num_subsamples):
                 ts = np.array([t] * x_T.shape[0])
                 x_t = np.where(mask, self.sample_q(x_cond, ts), x_t)
-                x_next = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, ts))
+                alphas = self.alphas_for_ts(ts)
+                x_next = self.ddpm_previous(
+                    x_t, ts, predictor.predict_epsilon(x_t, alphas)
+                )
                 samples.append(x_next)
             x_t = np.mean(samples, axis=0)
         return np.where(mask, x_cond, x_t)
 
-    def alphas_for_ts(self, ts, shape):
+    def alphas_for_ts(self, ts, shape=None):
         alphas = self.alphas[ts]
+        if shape is None:
+            return alphas
         while len(alphas.shape) < len(shape):
             alphas = alphas[..., None]
         return alphas
