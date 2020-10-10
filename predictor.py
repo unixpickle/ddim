@@ -29,7 +29,7 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
 
 
 class Predictor(nn.Module):
-    def __init__(self, data_shape):
+    def __init__(self, data_shape, num_layers=1):
         super().__init__()
         self.data_shape = data_shape
 
@@ -38,8 +38,7 @@ class Predictor(nn.Module):
         self.input_embed = nn.Linear(int(np.prod(data_shape)), 128)
         self.layers = nn.Sequential(
             nn.Tanh(),
-            nn.Linear(128, 128),
-            nn.Tanh(),
+            *[nn.Sequential(nn.Linear(128, 128), nn.Tanh()) for _ in range(num_layers)],
             nn.Linear(128, int(np.prod(data_shape))),
         )
 
