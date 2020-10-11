@@ -46,7 +46,9 @@ def main():
 
 
 def compute_loss(diffusion, model, batch):
-    ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],))
+    ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],)).to(
+        batch.device
+    )
     epsilon = torch.randn_like(batch)
     samples = (
         torch.from_numpy(

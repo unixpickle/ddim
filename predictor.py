@@ -13,12 +13,21 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
         if predictor is None:
             predictor = Predictor(batch.shape[1:])
             optim = Adam(predictor.parameters(), lr=lr)
-        ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],))
-        epsilon = torch.randn(*batch.shape)
-        samples = torch.from_numpy(
-            diffusion.sample_q(batch, ts.numpy(), epsilon=epsilon.numpy())
-        ).float()
-        alphas = torch.from_numpy(diffusion.alphas_for_ts(ts.numpy()))
+        dev = next(predictor.parameters()).device
+        ts = torch.randint(
+            low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],)
+        ).to(dev)
+        epsilon = torch.randn(*batch.shape).to(dev)
+        samples = (
+            torch.from_numpy(
+                diffusion.sample_q(
+                    batch, ts.cpu().numpy(), epsilon=epsilon.cpu().numpy()
+                )
+            )
+            .float()
+            .to(dev)
+        )
+        alphas = torch.from_numpy(diffusion.alphas_for_ts(ts.cpu().numpy())).to(dev)
         predictions = predictor(samples, alphas.float())
         loss = torch.mean((epsilon - predictions) ** 2)
         losses.append(loss.item())
@@ -58,8 +67,9 @@ class Predictor(nn.Module):
         return out.view(inputs.shape)
 
     def predict_epsilon(self, inputs_np, alphas_np):
-        inputs = torch.from_numpy(inputs_np).float()
-        alphas = torch.from_numpy(alphas_np).float()
+        dev = next(self.parameters()).device
+        inputs = torch.from_numpy(inputs_np).float().to(dev)
+        alphas = torch.from_numpy(alphas_np).float().to(dev)
         return self(inputs, alphas).detach().numpy().astype(inputs_np.dtype)
 
 
