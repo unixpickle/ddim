@@ -72,7 +72,7 @@ class Predictor(nn.Module):
         dev = next(self.parameters()).device
         inputs = torch.from_numpy(inputs_np).float().to(dev)
         alphas = torch.from_numpy(alphas_np).float().to(dev)
-        return self(inputs, alphas).detach().numpy().astype(inputs_np.dtype)
+        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
 
 
 class BayesPredictor(nn.Module):
