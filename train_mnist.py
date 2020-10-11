@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import torch
 from torchvision import datasets, transforms
@@ -8,6 +9,7 @@ from predictor import Predictor
 
 USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device("cpu" if not USE_CUDA else "cuda")
+SAVE_PATH = "mnist_model.pt"
 
 
 def main():
@@ -20,7 +22,9 @@ def main():
     diffusion = Diffusion(
         create_alpha_schedule(num_steps=100, beta_0=0.001, beta_T=0.2)
     )
-    model = Predictor((1, 28, 28), num_layers=3)
+    model = Predictor((1, 28, 28), num_layers=3, channels=2048)
+    if os.path.exists(SAVE_PATH):
+        model.load_state_dict(torch.load(SAVE_PATH))
     model.to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -37,7 +41,7 @@ def main():
         opt.step()
         if not step % args.save_interval:
             model.cpu()
-            torch.save(model.state_dict(), "mnist_model.pt")
+            torch.save(model.state_dict(), SAVE_PATH)
             model.to(DEVICE)
 
 

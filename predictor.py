@@ -29,23 +29,30 @@ def train_predictor(diffusion, data_batches, lr=1e-4):
 
 
 class Predictor(nn.Module):
-    def __init__(self, data_shape, num_layers=1):
+    def __init__(self, data_shape, num_layers=1, channels=128):
         super().__init__()
         self.data_shape = data_shape
 
-        self.timestep_coeff = torch.linspace(start=0.1, end=100, steps=128)[None]
-        self.timestep_phase = nn.Parameter(torch.randn(128)[None])
-        self.input_embed = nn.Linear(int(np.prod(data_shape)), 128)
+        self.timestep_coeff = torch.linspace(start=0.1, end=100, steps=channels)[None]
+        self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
+        self.input_embed = nn.Linear(int(np.prod(data_shape)), channels)
+        self.timestep_embed = nn.Sequential(
+            nn.Linear(channels, channels), nn.GELU(), nn.Linear(channels, channels),
+        )
         self.layers = nn.Sequential(
-            nn.Tanh(),
-            *[nn.Sequential(nn.Linear(128, 128), nn.Tanh()) for _ in range(num_layers)],
-            nn.Linear(128, int(np.prod(data_shape))),
+            nn.GELU(),
+            *[
+                nn.Sequential(nn.Linear(channels, channels), nn.GELU())
+                for _ in range(num_layers)
+            ],
+            nn.Linear(channels, int(np.prod(data_shape))),
         )
 
     def forward(self, inputs, alphas):
         embed_alphas = torch.sin(
             (self.timestep_coeff * alphas.float()[:, None]) + self.timestep_phase
         )
+        embed_alphas = self.timestep_embed(embed_alphas)
         embed_ins = self.input_embed(inputs.view(inputs.shape[0], -1))
         out = self.layers(embed_ins + embed_alphas)
         return out.view(inputs.shape)
