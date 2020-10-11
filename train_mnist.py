@@ -46,11 +46,15 @@ def main():
 
 
 def compute_loss(diffusion, model, batch):
-    ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],))
+    ts = torch.randint(low=1, high=diffusion.num_steps + 1, size=(batch.shape[0],)).to(
+        batch.device
+    )
     epsilon = torch.randn_like(batch)
     samples = (
         torch.from_numpy(
-            diffusion.sample_q(batch.cpu().numpy(), ts.numpy(), epsilon=epsilon.numpy())
+            diffusion.sample_q(
+                batch.cpu().numpy(), ts.cpu().numpy(), epsilon=epsilon.cpu().numpy()
+            )
         )
         .float()
         .to(batch.device)
@@ -65,7 +69,7 @@ def compute_loss(diffusion, model, batch):
 def iterate_loader(loader):
     while True:
         for x, _ in loader:
-            yield x
+            yield x.to(DEVICE)
 
 
 def create_datasets(batch, use_cuda):
