@@ -42,7 +42,9 @@ class Predictor(nn.Module):
         super().__init__()
         self.data_shape = data_shape
 
-        self.timestep_coeff = torch.linspace(start=0.1, end=100, steps=channels)[None]
+        self.register_buffer(
+            "timestep_coeff", torch.linspace(start=0.1, end=100, steps=channels)[None]
+        )
         self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
         self.input_embed = nn.Linear(int(np.prod(data_shape)), channels)
         self.timestep_embed = nn.Sequential(
