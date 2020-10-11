@@ -67,7 +67,7 @@ def compute_loss(diffusion, model, batch):
 def iterate_loader(loader):
     while True:
         for x, _ in loader:
-            yield x
+            yield x.to(DEVICE)
 
 
 def create_datasets(batch, use_cuda):
