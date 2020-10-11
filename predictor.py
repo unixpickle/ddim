@@ -75,6 +75,50 @@ class Predictor(nn.Module):
         return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
 
 
+class CNNPredictor(nn.Module):
+    def __init__(self, data_shape, num_res_blocks=3, channels=128):
+        super().__init__()
+        assert len(data_shape) == 3
+        self.data_shape = data_shape
+
+        self.register_buffer(
+            "timestep_coeff", torch.linspace(start=0.1, end=100, steps=channels)[None]
+        )
+        self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
+        self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
+        self.timestep_embed = nn.Sequential(
+            nn.Linear(channels, channels), nn.GELU(), nn.Linear(channels, channels),
+        )
+        self.res_blocks = nn.ModuleList([])
+        for i in range(num_res_blocks):
+            block = nn.Sequential(
+                nn.GELU(),
+                nn.Conv2d(channels, channels, 3, padding=1),
+                nn.GELU(),
+                nn.Conv2d(channels, channels, 3, padding=1),
+            )
+            self.res_blocks.append(block)
+        self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
+
+    def forward(self, inputs, alphas):
+        assert inputs.shape[1:] == self.data_shape
+        embed_alphas = torch.sin(
+            (self.timestep_coeff * alphas.float()[:, None]) + self.timestep_phase
+        )
+        embed_alphas = self.timestep_embed(embed_alphas)[..., None, None]
+        out = self.input_embed(inputs)
+        for block in self.res_blocks:
+            out = out + block(out)
+        out = self.out_layer(out)
+        return out
+
+    def predict_epsilon(self, inputs_np, alphas_np):
+        dev = next(self.parameters()).device
+        inputs = torch.from_numpy(inputs_np).float().to(dev)
+        alphas = torch.from_numpy(alphas_np).float().to(dev)
+        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+
+
 class BayesPredictor(nn.Module):
     """
     An epsilon predictor that uses Bayes rule to predict epsilon without any

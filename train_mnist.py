@@ -5,7 +5,7 @@ import torch
 from torchvision import datasets, transforms
 
 from ddim import Diffusion, create_alpha_schedule
-from predictor import Predictor
+from predictor import CNNPredictor
 
 USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device("cpu" if not USE_CUDA else "cuda")
@@ -15,14 +15,14 @@ SAVE_PATH = "mnist_model.pt"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", default=32, type=int)
-    parser.add_argument("--lr", default=1e-3, type=float)
+    parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--save-interval", default=1000, type=int)
     args = parser.parse_args()
     train_data, test_data = create_datasets(args.batch_size, USE_CUDA)
     diffusion = Diffusion(
         create_alpha_schedule(num_steps=100, beta_0=0.001, beta_T=0.2)
     )
-    model = Predictor((1, 28, 28), num_layers=3, channels=2048)
+    model = CNNPredictor((1, 28, 28))
     if os.path.exists(SAVE_PATH):
         model.load_state_dict(torch.load(SAVE_PATH))
     model.to(DEVICE)
