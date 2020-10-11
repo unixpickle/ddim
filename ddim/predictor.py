@@ -108,7 +108,7 @@ class CNNPredictor(nn.Module):
         embed_alphas = self.timestep_embed(embed_alphas)[..., None, None]
         out = self.input_embed(inputs)
         for block in self.res_blocks:
-            out = out + block(out)
+            out = out + block(out + embed_alphas)
         out = self.out_layer(out)
         return out
 
