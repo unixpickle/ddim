@@ -4,8 +4,7 @@ import os
 import torch
 from torchvision import datasets, transforms
 
-from ddim import Diffusion, create_alpha_schedule
-from predictor import CNNPredictor
+from ddim import Diffusion, CNNPredictor, create_alpha_schedule
 
 USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device("cpu" if not USE_CUDA else "cuda")
