@@ -53,7 +53,7 @@ def compute_loss(diffusion, model, batch):
     samples = (
         torch.from_numpy(
             diffusion.sample_q(
-                batch.cpu().numpy(), ts.cpu().numpy(), epsilon=epsilon.numpy()
+                batch.cpu().numpy(), ts.cpu().numpy(), epsilon=epsilon.cpu().numpy()
             )
         )
         .float()
