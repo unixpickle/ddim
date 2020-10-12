@@ -97,10 +97,9 @@ class CNNPredictor(nn.Module):
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=1),
                 nn.GELU(),
-                nn.Conv2d(channels, channels, 3, padding=2, dilation=2),
+                nn.Conv2d(channels, channels, 3, padding=1),
+                SELayer(channels),
             )
-            block[-1].bias.detach().zero_()
-            block[-1].weight.detach().zero_()
             self.res_blocks.append(block)
         self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
 
@@ -122,6 +121,28 @@ class CNNPredictor(nn.Module):
         alphas = torch.from_numpy(alphas_np).float().to(dev)
         with torch.no_grad():
             return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+
+
+class SELayer(nn.Module):
+    """
+    https://github.com/moskomule/senet.pytorch/blob/23839e07525f9f5d39982140fccc8b925fe4dee9/senet/se_module.py
+    """
+
+    def __init__(self, channel, reduction=8):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
 
 
 class BayesPredictor(nn.Module):
