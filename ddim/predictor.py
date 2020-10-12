@@ -72,7 +72,8 @@ class Predictor(nn.Module):
         dev = next(self.parameters()).device
         inputs = torch.from_numpy(inputs_np).float().to(dev)
         alphas = torch.from_numpy(alphas_np).float().to(dev)
-        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+        with torch.no_grad():
+            return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
 
 
 class CNNPredictor(nn.Module):
@@ -97,8 +98,8 @@ class CNNPredictor(nn.Module):
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=2, dilation=2),
             )
-            block[-1].bias.zero_()
-            block[-1].weight.zero_()
+            block[-1].bias.detach().zero_()
+            block[-1].weight.detach().zero_()
             self.res_blocks.append(block)
         self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
 
@@ -118,7 +119,8 @@ class CNNPredictor(nn.Module):
         dev = next(self.parameters()).device
         inputs = torch.from_numpy(inputs_np).float().to(dev)
         alphas = torch.from_numpy(alphas_np).float().to(dev)
-        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+        with torch.no_grad():
+            return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
 
 
 class BayesPredictor(nn.Module):
