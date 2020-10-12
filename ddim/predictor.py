@@ -92,6 +92,7 @@ class CNNPredictor(nn.Module):
         )
         self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
         self.res_blocks = nn.ModuleList([])
+        self.timestep_blocks = nn.ModuleList([])
         for i in range(num_res_blocks):
             block = nn.Sequential(
                 nn.GroupNorm(8, channels),
@@ -102,6 +103,13 @@ class CNNPredictor(nn.Module):
                 SELayer(channels),
             )
             self.res_blocks.append(block)
+            self.timestep_blocks.append(
+                nn.Sequential(
+                    nn.Linear(channels, channels),
+                    nn.GELU(),
+                    nn.Linear(channels, channels),
+                )
+            )
         self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
 
     def forward(self, inputs, alphas):
@@ -109,10 +117,10 @@ class CNNPredictor(nn.Module):
         embed_alphas = torch.sin(
             (self.timestep_coeff * alphas.float()[:, None]) + self.timestep_phase
         )
-        embed_alphas = self.timestep_embed(embed_alphas)[..., None, None]
+        embed_alphas = self.timestep_embed(embed_alphas)
         out = self.input_embed(inputs)
-        for block in self.res_blocks:
-            out = out + block(out + embed_alphas)
+        for block, ts_block in zip(self.res_blocks, self.timestep_blocks):
+            out = out + block(out + ts_block(embed_alphas)[..., None, None])
         out = self.out_layer(out)
         return out
 
