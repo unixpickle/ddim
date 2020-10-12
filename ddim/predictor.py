@@ -83,13 +83,14 @@ class CNNPredictor(nn.Module):
         self.data_shape = data_shape
 
         self.register_buffer(
-            "timestep_coeff", torch.linspace(start=0.1, end=100, steps=channels)[None]
+            "timestep_coeff",
+            torch.linspace(start=0.1, end=1000, steps=channels * 4)[None],
         )
-        self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
-        self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
+        self.timestep_phase = nn.Parameter(torch.randn(channels * 4)[None])
         self.timestep_embed = nn.Sequential(
-            nn.Linear(channels, channels), nn.GELU(), nn.Linear(channels, channels),
+            nn.Linear(channels * 4, channels), nn.GELU(), nn.Linear(channels, channels),
         )
+        self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
         self.res_blocks = nn.ModuleList([])
         for i in range(num_res_blocks):
             block = nn.Sequential(
