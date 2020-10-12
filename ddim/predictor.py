@@ -77,7 +77,7 @@ class Predictor(nn.Module):
 
 
 class CNNPredictor(nn.Module):
-    def __init__(self, data_shape, num_res_blocks=5, channels=128):
+    def __init__(self, data_shape, num_res_blocks=7, channels=128):
         super().__init__()
         assert len(data_shape) == 3
         self.data_shape = data_shape
@@ -134,7 +134,11 @@ class CNNPredictor(nn.Module):
 
 class SELayer(nn.Module):
     """
+    A squeeze-excitation layer, from:
     https://github.com/moskomule/senet.pytorch/blob/23839e07525f9f5d39982140fccc8b925fe4dee9/senet/se_module.py
+
+    This layer provides global context to each local part of an image,
+    allowing for larger receptive field without much extra compute.
     """
 
     def __init__(self, channel, reduction=8):
