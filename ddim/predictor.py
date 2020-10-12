@@ -76,7 +76,7 @@ class Predictor(nn.Module):
 
 
 class CNNPredictor(nn.Module):
-    def __init__(self, data_shape, num_res_blocks=3, channels=128):
+    def __init__(self, data_shape, num_res_blocks=5, channels=128):
         super().__init__()
         assert len(data_shape) == 3
         self.data_shape = data_shape
@@ -95,8 +95,10 @@ class CNNPredictor(nn.Module):
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=1),
                 nn.GELU(),
-                nn.Conv2d(channels, channels, 3, padding=1),
+                nn.Conv2d(channels, channels, 3, padding=2, dilation=2),
             )
+            block[-1].bias.zero_()
+            block[-1].weight.zero_()
             self.res_blocks.append(block)
         self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
 
