@@ -94,6 +94,7 @@ class CNNPredictor(nn.Module):
         self.res_blocks = nn.ModuleList([])
         for i in range(num_res_blocks):
             block = nn.Sequential(
+                nn.GroupNorm(8, channels),
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=1),
                 nn.GELU(),
