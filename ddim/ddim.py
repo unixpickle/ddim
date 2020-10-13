@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm.auto import tqdm
 
 
 def create_alpha_schedule(num_steps=100, beta_0=0.0001, beta_T=0.02):
@@ -32,21 +33,27 @@ class Diffusion:
         alphas = self.alphas_for_ts(ts, x_0.shape)
         return np.sqrt(alphas) * x_0 + np.sqrt(1 - alphas) * epsilon
 
+    def predict_x0(self, x_t, ts, epsilon_prediction):
+        alphas = self.alphas_for_ts(ts, x_t.shape)
+        return (x_t - np.sqrt(1 - alphas) * epsilon_prediction) / np.sqrt(alphas)
+
     def ddim_previous(self, x_t, ts, epsilon_prediction):
         """
         Take a ddim sampling step given x_t, t, and epsilon prediction.
         """
-        alphas = self.alphas_for_ts(ts, x_t.shape)
-        x_0 = (x_t - np.sqrt(1 - alphas) * epsilon_prediction) / np.sqrt(alphas)
+        x_0 = self.predict_x0(x_t, ts, epsilon_prediction)
         return self.sample_q(x_0, ts - 1, epsilon=epsilon_prediction)
 
-    def ddim_sample(self, x_T, predictor):
+    def ddim_sample(self, x_T, predictor, progress=False):
         """
         Sample x_0 from x_t using DDIM, assuming a method on predictor called
         predict_epsilon(x_t, alphas).
         """
         x_t = x_T
-        for t in range(1, self.num_steps)[::-1]:
+        t_iter = range(1, self.num_steps + 1)[::-1]
+        if progress:
+            t_iter = tqdm(t_iter)
+        for t in t_iter:
             ts = np.array([t] * x_T.shape[0])
             alphas = self.alphas_for_ts(ts)
             x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
@@ -58,7 +65,7 @@ class Diffusion:
         in the boolean mask.
         """
         x_t = x_T
-        for t in range(1, self.num_steps)[::-1]:
+        for t in range(1, self.num_steps + 1)[::-1]:
             ts = np.array([t] * x_T.shape[0])
             alphas = self.alphas_for_ts(ts)
             x_t = np.where(mask, self.sample_q(x_cond, ts), x_t)
@@ -83,7 +90,7 @@ class Diffusion:
         Usage is the same as ddim_sample().
         """
         x_t = x_T
-        for t in range(1, self.num_steps)[::-1]:
+        for t in range(1, self.num_steps + 1)[::-1]:
             ts = np.array([t] * x_T.shape[0])
             alphas = self.alphas_for_ts(ts)
             x_t = self.ddpm_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
@@ -96,7 +103,7 @@ class Diffusion:
         See ddim_sample_cond() for usage details.
         """
         x_t = x_T
-        for t in range(1, self.num_steps)[::-1]:
+        for t in range(1, self.num_steps + 1)[::-1]:
             samples = []
             for _ in range(num_subsamples):
                 ts = np.array([t] * x_T.shape[0])
