@@ -72,32 +72,44 @@ class Predictor(nn.Module):
         dev = next(self.parameters()).device
         inputs = torch.from_numpy(inputs_np).float().to(dev)
         alphas = torch.from_numpy(alphas_np).float().to(dev)
-        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+        with torch.no_grad():
+            return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
 
 
 class CNNPredictor(nn.Module):
-    def __init__(self, data_shape, num_res_blocks=3, channels=128):
+    def __init__(self, data_shape, num_res_blocks=7, channels=128):
         super().__init__()
         assert len(data_shape) == 3
         self.data_shape = data_shape
 
         self.register_buffer(
-            "timestep_coeff", torch.linspace(start=0.1, end=100, steps=channels)[None]
+            "timestep_coeff",
+            torch.linspace(start=0.1, end=1000, steps=channels * 4)[None],
         )
-        self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
-        self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
+        self.timestep_phase = nn.Parameter(torch.randn(channels * 4)[None])
         self.timestep_embed = nn.Sequential(
-            nn.Linear(channels, channels), nn.GELU(), nn.Linear(channels, channels),
+            nn.Linear(channels * 4, channels), nn.GELU(), nn.Linear(channels, channels),
         )
+        self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
         self.res_blocks = nn.ModuleList([])
+        self.timestep_blocks = nn.ModuleList([])
         for i in range(num_res_blocks):
             block = nn.Sequential(
+                nn.GroupNorm(8, channels),
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=1),
                 nn.GELU(),
                 nn.Conv2d(channels, channels, 3, padding=1),
+                SELayer(channels),
             )
             self.res_blocks.append(block)
+            self.timestep_blocks.append(
+                nn.Sequential(
+                    nn.Linear(channels, channels),
+                    nn.GELU(),
+                    nn.Linear(channels, channels),
+                )
+            )
         self.out_layer = nn.Conv2d(channels, data_shape[0], 3, padding=1)
 
     def forward(self, inputs, alphas):
@@ -105,10 +117,10 @@ class CNNPredictor(nn.Module):
         embed_alphas = torch.sin(
             (self.timestep_coeff * alphas.float()[:, None]) + self.timestep_phase
         )
-        embed_alphas = self.timestep_embed(embed_alphas)[..., None, None]
+        embed_alphas = self.timestep_embed(embed_alphas)
         out = self.input_embed(inputs)
-        for block in self.res_blocks:
-            out = out + block(out + embed_alphas)
+        for block, ts_block in zip(self.res_blocks, self.timestep_blocks):
+            out = out + block(out + ts_block(embed_alphas)[..., None, None])
         out = self.out_layer(out)
         return out
 
@@ -116,7 +128,34 @@ class CNNPredictor(nn.Module):
         dev = next(self.parameters()).device
         inputs = torch.from_numpy(inputs_np).float().to(dev)
         alphas = torch.from_numpy(alphas_np).float().to(dev)
-        return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+        with torch.no_grad():
+            return self(inputs, alphas).detach().cpu().numpy().astype(inputs_np.dtype)
+
+
+class SELayer(nn.Module):
+    """
+    A squeeze-excitation layer, from:
+    https://github.com/moskomule/senet.pytorch/blob/23839e07525f9f5d39982140fccc8b925fe4dee9/senet/se_module.py
+
+    This layer provides global context to each local part of an image,
+    allowing for larger receptive field without much extra compute.
+    """
+
+    def __init__(self, channel, reduction=8):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
 
 
 class BayesPredictor(nn.Module):
