@@ -72,16 +72,21 @@ class Diffusion:
             x_t = self.ddim_previous(x_t, ts, predictor.predict_epsilon(x_t, alphas))
         return np.where(mask, x_cond, x_t)
 
-    def ddpm_previous(self, x_t, ts, epsilon_prediction, epsilon=None):
+    def ddpm_previous(
+        self, x_t, ts, epsilon_prediction, epsilon=None, cond_prediction=None
+    ):
         if epsilon is None:
             epsilon = np.random.normal(size=x_t.shape)
         alphas_t = self.alphas_for_ts(ts, x_t.shape)
         alphas_prev = self.alphas_for_ts(ts - 1, x_t.shape)
         alphas = alphas_t / alphas_prev
         betas = 1 - alphas
-        return (1 / np.sqrt(alphas)) * (
+        prev_mean = (1 / np.sqrt(alphas)) * (
             x_t - betas / np.sqrt(1 - alphas_t) * epsilon_prediction
-        ) + np.sqrt(betas) * epsilon
+        )
+        if cond_prediction is not None:
+            prev_mean += betas * cond_prediction
+        return prev_mean + np.sqrt(betas) * epsilon
 
     def ddpm_sample(self, x_T, predictor):
         """
@@ -115,6 +120,23 @@ class Diffusion:
                 samples.append(x_next)
             x_t = np.mean(samples, axis=0)
         return np.where(mask, x_cond, x_t)
+
+    def ddpm_sample_cond_energy(self, x_T, predictor, cond_fn):
+        """
+        Create a sample using an energy function cond_fn as a conditioning
+        signal, to compute p(x)*p(y|x), where cond_fn is grad_x log(p(y|x)).
+        """
+        x_t = x_T
+        for t in range(1, self.num_steps + 1)[::-1]:
+            ts = np.array([t] * x_T.shape[0])
+            alphas = self.alphas_for_ts(ts)
+            x_t = self.ddpm_previous(
+                x_t,
+                ts,
+                predictor.predict_epsilon(x_t, alphas),
+                cond_prediction=cond_fn(x_t, alphas),
+            )
+        return x_t
 
     def alphas_for_ts(self, ts, shape=None):
         alphas = self.alphas[ts]

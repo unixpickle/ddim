@@ -48,7 +48,9 @@ class Predictor(nn.Module):
         self.timestep_phase = nn.Parameter(torch.randn(channels)[None])
         self.input_embed = nn.Linear(int(np.prod(data_shape)), channels)
         self.timestep_embed = nn.Sequential(
-            nn.Linear(channels, channels), nn.GELU(), nn.Linear(channels, channels),
+            nn.Linear(channels, channels),
+            nn.GELU(),
+            nn.Linear(channels, channels),
         )
         self.layers = nn.Sequential(
             nn.GELU(),
@@ -88,12 +90,14 @@ class CNNPredictor(nn.Module):
         )
         self.timestep_phase = nn.Parameter(torch.randn(channels * 4)[None])
         self.timestep_embed = nn.Sequential(
-            nn.Linear(channels * 4, channels), nn.GELU(), nn.Linear(channels, channels),
+            nn.Linear(channels * 4, channels),
+            nn.GELU(),
+            nn.Linear(channels, channels),
         )
         self.input_embed = nn.Conv2d(data_shape[0], channels, 1)
         self.res_blocks = nn.ModuleList([])
         self.timestep_blocks = nn.ModuleList([])
-        for i in range(num_res_blocks):
+        for _ in range(num_res_blocks):
             block = nn.Sequential(
                 nn.GroupNorm(8, channels),
                 nn.GELU(),
