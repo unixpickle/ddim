@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from tqdm.auto import tqdm
 
 
@@ -137,6 +138,21 @@ class Diffusion:
                 cond_prediction=cond_fn(x_t, alphas),
             )
         return x_t
+
+    def ddpm_sample_cond_energy_inpaint(self, x_T, predictor, x_cond, mask):
+        def cond_fn(x_t, alphas):
+            with torch.enable_grad():
+                alphas_torch = torch.from_numpy(alphas)
+                x_t_torch = torch.from_numpy(x_t).requires_grad_(True)
+                eps_pred = predictor(x_t_torch, torch.from_numpy(alphas))
+                x_start = (
+                    x_t_torch - (1 - alphas_torch).sqrt() * eps_pred
+                ) / alphas_torch.sqrt()
+                loss = (((x_cond - x_start) ** 2) * mask).sum()
+                grad = torch.autograd.grad(loss, x_t_torch)[0]
+                return grad.detach().numpy()
+
+        return self.ddpm_sample_cond_energy(x_T, predictor, cond_fn)
 
     def alphas_for_ts(self, ts, shape=None):
         alphas = self.alphas[ts]
