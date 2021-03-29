@@ -141,14 +141,19 @@ class Diffusion:
 
     def ddpm_sample_cond_energy_inpaint(self, x_T, predictor, x_cond, mask):
         def cond_fn(x_t, alphas):
+            while len(alphas.shape) < len(x_t.shape):
+                alphas = alphas[..., None]
             with torch.enable_grad():
                 alphas_torch = torch.from_numpy(alphas)
                 x_t_torch = torch.from_numpy(x_t).requires_grad_(True)
-                eps_pred = predictor(x_t_torch, torch.from_numpy(alphas))
+                eps_pred = predictor(x_t_torch, alphas_torch)
                 x_start = (
                     x_t_torch - (1 - alphas_torch).sqrt() * eps_pred
                 ) / alphas_torch.sqrt()
-                loss = (((x_cond - x_start) ** 2) * mask).sum()
+                loss = (
+                    ((torch.from_numpy(x_cond) - x_start) ** 2)
+                    * torch.from_numpy(mask).float()
+                ).sum()
                 grad = torch.autograd.grad(loss, x_t_torch)[0]
                 return grad.detach().numpy()
 
