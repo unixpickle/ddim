@@ -139,7 +139,9 @@ class Diffusion:
             )
         return x_t
 
-    def ddpm_sample_cond_energy_inpaint(self, x_T, predictor, x_cond, mask, temp=1.0):
+    def ddpm_sample_cond_energy_inpaint(
+        self, x_T, predictor, x_cond, mask, temp=1.0, eps=1e-2
+    ):
         def cond_fn(x_t, alphas):
             while len(alphas.shape) < len(x_t.shape):
                 alphas = alphas[..., None]
@@ -150,12 +152,18 @@ class Diffusion:
                 x_start = (
                     x_t_torch - (1 - alphas_torch).sqrt() * eps_pred
                 ) / alphas_torch.sqrt()
-                loss = (
-                    ((torch.from_numpy(x_cond) - x_start) ** 2)
-                    * torch.from_numpy(mask).float()
-                ).sum()
+
+                # This should be the variance of the x_start prediction,
+                # but instead we use the variance of a signal noised to
+                # the current timestep as a reasonable guess.
+                sigmas = eps + 1 - alphas_torch
+
+                log_density = -((torch.from_numpy(x_cond) - x_start) ** 2) / (
+                    2 * sigmas
+                )
+                loss = (log_density * torch.from_numpy(mask).float()).sum()
                 grad = torch.autograd.grad(loss, x_t_torch)[0]
-                return grad.detach().numpy() / (-temp)
+                return grad.detach().numpy() / temp
 
         return self.ddpm_sample_cond_energy(x_T, predictor, cond_fn)
 
