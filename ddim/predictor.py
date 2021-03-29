@@ -185,9 +185,9 @@ class BayesPredictor(nn.Module):
         )
         while len(logits.shape) > 2:
             logits = torch.sum(logits, dim=-1)
-        logits -= torch.max(logits, dim=1, keepdims=True)[0]
+        logits = logits - torch.max(logits, dim=1, keepdims=True)[0]
         probs = torch.exp(logits)
-        probs /= torch.sum(probs, dim=1, keepdims=True)
+        probs = probs / torch.sum(probs, dim=1, keepdims=True)
         while len(probs.shape) < len(self.data_batch.shape) + 1:
             probs = probs[..., None]
         x_0 = torch.sum(torch.from_numpy(self.data_batch[None]) * probs, dim=1)
