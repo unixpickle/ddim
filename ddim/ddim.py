@@ -139,7 +139,7 @@ class Diffusion:
             )
         return x_t
 
-    def ddpm_sample_cond_energy_inpaint(self, x_T, predictor, x_cond, mask):
+    def ddpm_sample_cond_energy_inpaint(self, x_T, predictor, x_cond, mask, temp=1.0):
         def cond_fn(x_t, alphas):
             while len(alphas.shape) < len(x_t.shape):
                 alphas = alphas[..., None]
@@ -155,7 +155,7 @@ class Diffusion:
                     * torch.from_numpy(mask).float()
                 ).sum()
                 grad = torch.autograd.grad(loss, x_t_torch)[0]
-                return grad.detach().numpy()
+                return grad.detach().numpy() / (-temp)
 
         return self.ddpm_sample_cond_energy(x_T, predictor, cond_fn)
 
