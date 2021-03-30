@@ -146,9 +146,9 @@ class Diffusion:
             while len(alphas.shape) < len(x_t.shape):
                 alphas = alphas[..., None]
             with torch.enable_grad():
-                alphas_torch = torch.from_numpy(alphas)
-                x_t_torch = torch.from_numpy(x_t).requires_grad_(True)
-                eps_pred = predictor(x_t_torch, alphas_torch)
+                alphas_torch = torch.from_numpy(alphas).float()
+                x_t_torch = torch.from_numpy(x_t).float().requires_grad_(True)
+                eps_pred = predictor(x_t_torch, alphas_torch.view(-1))
                 x_start = (
                     x_t_torch - (1 - alphas_torch).sqrt() * eps_pred
                 ) / alphas_torch.sqrt()
